@@ -1,88 +1,122 @@
 const express = require('express');
-let mysql = require('mysql2');
+const mysql = require('mysql2/promise'); // <-- Menggunakan 'mysql2/promise' untuk async/await
 const app = express();
-const port = 3000;
+const PORT = 3000; // Gunakan PORT 3000
+
+// KONFIGURASI DATABASE
+const db = mysql.createPool({
+  host: 'localhost',
+  user: 'root',
+  password: 'Mnbvcxz123.',
+  database: 'hollywood',
+  port: 3306
+});
+
+// MIDDLEWARE
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
 });
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
 
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: 'Mnbvcxz123.',
-  database: 'hollywood',
-  port:`3306`
-});
-
-db.connect((err) => {
-  if (err) {
-    console.error('Error connecting to the MySQL:', err.stack);
-    return;
+app.get('/film', async (req, res) => {
+  try {
+ 
+    const [results] = await db.query('SELECT * FROM film');
+    res.send(results);
+  } catch (err) {
+    console.error('Error fetching data:', err);
+    res.status(500).send({ message: "Gagal mengambil data film", error: err.message });
   }
-  console.log('Connection Succesfully!');
 });
 
-app.get('/film', (req, res) => {
-  db.query('SELECT * FROM film', (err, results) => {
-    if (err) {
-        console.error('Error fetching data:', err.stack);
-        res.status(500).send('Error fetching data');
-        return;
-    }
-    res.json(results);
-  });
+
+app.post('/film', async (req, res) => {
+  const { Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre } = req.body;
+
+ 
+  if (!Nama_Film || !Deskripsi || !Sutradara || !tahun_terbit || !genre) {
+    return res.status(400).send({ message: 'Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre wajib diisi' });
+  }
+
+  try {
+    const sql = 'INSERT INTO film (Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre) VALUES (?, ?, ?, ?, ?)';
+    const [result] = await db.query(sql, [Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre]);
+    
+
+    res.status(201).send({
+      message: 'Data film berhasil ditambahkan',
+      id: result.insertId,
+      ...req.body 
+    });
+  } catch (err) {
+    console.error('Error inserting data:', err);
+    res.status(500).send({ message: "Gagal menambahkan data film", error: err.message });
+  }
 });
 
-app.post('/api/film', (req, res) => {
-  const { Nama_Film, Deskripsi, Sutradara,tahun_terbit, genre } = req.body; 
 
-    if (!Nama_Film || !Deskripsi || !Sutradara || !tahun_terbit || !genre) {    
-        return res.status(400).json({massage:'Nama_Film, Deskripsi, Sutradara,tahun_terbit, genre wajib diisi'});   
+app.put('/film/:id', async (req, res) => {
+  const { id } = req.params;
+  const { Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre } = req.body;
+
+  try {
+  
+    const [rows] = await db.query('SELECT * FROM film WHERE ID = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).send({ message: 'Film tidak ditemukan' });
+    }
+    
+   
+    const sql = 'UPDATE film SET Nama_Film = ?, Deskripsi = ?, Sutradara = ?, tahun_terbit = ?, genre = ? WHERE ID = ?';
+    await db.query(sql, [Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre, id]);
+
+    res.send({ message: 'Data film berhasil diupdate' });
+  } catch (err) {
+    console.error('Error updating data:', err);
+    res.status(500).send({ message: "Gagal mengupdate data film", error: err.message });
+  }
+});
+
+
+app.delete('/film/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+  
+    const [rows] = await db.query('SELECT * FROM film WHERE ID = ?', [id]);
+    if (rows.length === 0) {
+      return res.status(404).send({ message: 'Film tidak ditemukan' });
     }
 
-    db.query('INSERT INTO film (Nama_Film, Deskripsi, Sutradara,tahun_terbit, genre) VALUES (?, ?, ?, ?, ?)', 
-        [Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre], (err, result) => {
-        if (err) {
-            console.error('Error inserting data:', err.stack);
-            return res.status(500).json({massage:'Error inserting data'});
-        }   
-        res.status(201).json({massage:'Data film berhasil ditambahkan', id: result.insertId});
+
+    await db.query('DELETE FROM film WHERE ID = ?', [id]);
+    
+    res.send({ message: 'Data film berhasil dihapus' });
+  } catch (err) {
+    console.error('Error deleting data:', err);
+    res.status(500).send({ message: "Gagal menghapus data film", error: err.message });
+  }
+});
+
+
+
+const startServer = async () => {
+  try {
+  
+    await db.query('SELECT 1');
+    console.log('Connection Succesfully!');
+    
+    app.listen(PORT, () => {
+      console.log(`Server started on port ${PORT}`);
     });
 
-});
+  } catch (err) {
+    console.error('Error connecting to the MySQL:', err.stack);
+  }
+};
 
-app.put('/api/film/:id', (req, res) => {
-    const filmId = req.params.id;
-    const { Nama_Film, Deskripsi, Sutradara,tahun_terbit, genre } = req.body;
-    db.query('UPDATE film SET Nama_Film = ?, Deskripsi = ?, Sutradara = ?, tahun_terbit = ?, genre = ? WHERE id = ?', 
-    [Nama_Film, Deskripsi, Sutradara, tahun_terbit, genre, filmId], (err, result) => {
-        if (err) {  
-                console.error(err);
-                return res.status(500).json({massage:'Database error'});
-        }   
-        res.json({massage:'Data film berhasil diupdate'});
-    }
-    );
-});
-
-app.delete('/api/film/:id', (req, res) => {
-    const filmId = req.params.id;   
-    db.query('DELETE FROM film WHERE id = ?', [filmId], (err, result) => {
-        if (err) {  
-                console.error(err);
-                return res.status(500).json({massage:'Database error'});
-        }   
-
-        res.json({massage:'Data film berhasil dihapus'});
-    }   
-    );      
-}); 
-
-
+startServer();
